@@ -1,0 +1,9 @@
+cookies.json
+output.json
+debug/
+__pycache__/
+.venv/
+
+# Secretos y resultados del análisis
+.env
+resultados/

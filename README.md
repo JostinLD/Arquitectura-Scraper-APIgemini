@@ -596,12 +596,3 @@ mejorar sus productos, y **revisores humanos pueden leerlo**. Además, recomiend
 expresamente *no enviar información sensible, confidencial o personal*. Por eso este
 proyecto anonimiza los datos antes de enviarlos y llama a la API con `store=False`.
 
----
-
-## Integrantes
-
-| Nombre | Rol |
-|---|---|
-| [COMPLETAR] | [COMPLETAR] |
-| [COMPLETAR] | [COMPLETAR] |
-| [COMPLETAR] | [COMPLETAR] |

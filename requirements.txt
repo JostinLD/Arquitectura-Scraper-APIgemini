@@ -6,3 +6,7 @@ playwright-stealth>=2.0.0
 # Análisis de personalidad con Gemini (analyze.py)
 google-genai==2.33.0
 python-dotenv==1.2.4
+
+# Ley de Benford sobre seguidores (benford_seguidores.py)
+matplotlib>=3.9
+scipy>=1.14

@@ -36,6 +36,7 @@ from exceptions import (
     SessionExpiredError,
 )
 from models import Comment, Post, PostType, Profile, ScrapeResult
+from scraper.seguidores import ExtractorSeguidores, convertir_numero
 from utils.humanize import human_scroll, jitter, random_mouse_move
 
 log = logging.getLogger(__name__)
@@ -78,10 +79,12 @@ class InstagramScraper:
         *,
         headless: bool = config.HEADLESS,
         max_posts: int = config.MAX_POSTS,
+        max_cuentas: int = config.MAX_CUENTAS,
     ) -> None:
         self._cookies = cookies
         self.headless = headless
         self.max_posts = max_posts
+        self.max_cuentas = max_cuentas
 
         self._pw: Playwright | None = None
         self._browser: Browser | None = None
@@ -191,12 +194,20 @@ class InstagramScraper:
         else:
             self._collect_posts()
 
+        # Seguidores para Benford, en el mismo recorrido (sin volver a abrir el perfil).
+        muestra, saltadas = [], 0
+        if self.max_cuentas > 0 and not profile.is_private:
+            muestra, saltadas = ExtractorSeguidores(
+                self._page, self._target, self.max_cuentas, self._process_pending
+            ).extraer()
+
         posts = sorted(
             self._posts.values(),
             key=lambda p: p.timestamp or datetime.min.replace(tzinfo=timezone.utc),
             reverse=True,
         )[: self.max_posts]
-        return ScrapeResult(profile=profile, posts=posts, total_posts=len(posts))
+        return ScrapeResult(profile=profile, posts=posts, total_posts=len(posts),
+                            muestra_seguidores=muestra, cuentas_saltadas=saltadas)
 
     # ------------------------------------------------------------------ navegación
     def _reset_state(self, username: str) -> None:
@@ -475,7 +486,7 @@ class InstagramScraper:
                 return None
             titled = link.locator("span[title]").first
             raw = titled.get_attribute("title") if titled.count() else link.inner_text()
-            return parse_human_count(raw)
+            return convertir_numero(raw)
 
         followers, following = link_count("followers"), link_count("following")
         if followers is None:
@@ -483,7 +494,7 @@ class InstagramScraper:
             content = meta.get_attribute("content") if meta.count() else None
             numbers = re.findall(r"([\d.,]+\s*[KkMm]?)", content or "")
             if len(numbers) >= 2:
-                followers, following = parse_human_count(numbers[0]), parse_human_count(numbers[1])
+                followers, following = convertir_numero(numbers[0]), convertir_numero(numbers[1])
         if followers is None and following is None:
             return None
         return Profile(username=self._target, followers=followers, following=following,
@@ -591,23 +602,6 @@ def shortcode_to_media_id(shortcode: str) -> str:
     for char in shortcode[:11]:
         media_id = media_id * 64 + _SHORTCODE_ALPHABET.index(char)
     return str(media_id)
-
-
-def parse_human_count(raw: str | None) -> int | None:
-    """Convierte '1,234', '10.5k', '1,2 M' o '3 mil' en entero (aproximado)."""
-    if not raw:
-        return None
-    text = raw.strip().lower().replace(" ", " ")
-    # Las alternativas largas van primero: si no, "mil" se leería como "m" (millones).
-    match = re.search(r"([\d.,]+)\s*(mill|mil|k|m)?", text)
-    if not match:
-        return None
-    number, suffix = match.group(1), match.group(2)
-    multiplier = {"k": 1_000, "mil": 1_000, "m": 1_000_000, "mill": 1_000_000}.get(suffix or "", 1)
-    if multiplier == 1:
-        digits = re.sub(r"[.,]", "", number)
-        return int(digits) if digits else None
-    return int(float(number.replace(",", ".")) * multiplier)
 
 
 def _count(node: dict[str, Any], key: str) -> int | None:

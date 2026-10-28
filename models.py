@@ -47,8 +47,17 @@ class Post(BaseModel):
     source: DataSource = "network"
 
 
+class SeguidorMuestra(BaseModel):
+    """Una cuenta de la lista de seguidores y su número de seguidores (leído con hover)."""
+    usuario: str
+    seguidores: int = Field(ge=0)
+
+
 class ScrapeResult(BaseModel):
     profile: Profile
     posts: list[Post]
     total_posts: int
+    # Muestra de seguidores para la ley de Benford (vacía si no se extrajo).
+    muestra_seguidores: list[SeguidorMuestra] = Field(default_factory=list)
+    cuentas_saltadas: int = 0  # cuentas cuya tarjeta emergente no cargó
     scraped_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

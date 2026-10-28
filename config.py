@@ -13,14 +13,14 @@ DEBUG_DIR = BASE_DIR / "debug"  # capturas cuando Instagram pide login/checkpoin
 # --- Objetivo ----------------------------------------------------------------
 # Perfil a extraer cuando se ejecuta `python main.py` sin argumentos (o con
 # "Run" del editor). Acepta "usuario", "@usuario" o la URL completa del perfil.
-TARGET_PROFILE = "https://www.instagram.com/usuario_ejemplo/"
+TARGET_PROFILE = "https://www.instagram.com/cris.estefi/"
 
 # --- Instagram ---------------------------------------------------------------
 # URL base del sitio: NO poner aquí un perfil (se usa para construir todas las URLs).
 INSTAGRAM_URL = "https://www.instagram.com"
 # App ID público que usa la web de Instagram en la cabecera X-IG-App-ID.
 IG_APP_ID = "936619743392459"
-MAX_POSTS = 200
+MAX_POSTS = 20
 MAX_PREVIEW_COMMENTS = 5  # comentarios de vista previa guardados por post
 
 # Fragmentos de URL cuyas respuestas JSON se interceptan.
@@ -79,6 +79,22 @@ SCROLL_DELAY = (2.5, 4.8)    # pausa entre scrolls (s)
 MAX_SCROLL_ROUNDS = 20       # tope absoluto de scrolls
 MAX_STAGNANT_ROUNDS = 4      # scrolls seguidos sin posts nuevos antes de parar
 
+# --- Seguidores para la ley de Benford (scraper/seguidores.py) ---------------------
+# Cuántas cuentas de la lista de seguidores se leen con hover. 0 = no extraer.
+MAX_CUENTAS = 6
+SEGUIDORES_CSV = BASE_DIR / "seguidores.csv"  # columnas: usuario, seguidores
+# Tiempo TOTAL por cuenta (s), incluida la espera de la tarjeta. Si la tarjeta tardó
+# 1,2 s y sale 2,5, solo se esperan 1,3 s más. Bajarlo aumenta el riesgo de bloqueo.
+SEGUNDOS_POR_CUENTA = (2.0, 3.2)
+HOVER_TIMEOUT_S = 5          # espera máxima a que aparezca la tarjeta emergente
+MODAL_TIMEOUT_S = 20         # espera máxima a que cargue la lista de seguidores
+SCROLL_MODAL_DELAY = (1.2, 2.5)  # pausa tras cada scroll dentro del modal (s)
+PAUSA_LARGA_CADA = 40        # cada cuántas cuentas se hace una pausa larga
+PAUSA_LARGA = (6.0, 12.0)    # duración de la pausa larga (s)
+# Freno: si N tarjetas seguidas no cargan, Instagram puede estar limitándonos.
+FRENO_TRAS_SALTADAS = 3
+PAUSA_FRENO = (30.0, 60.0)
+
 # --- Análisis de personalidad (analyze.py) -------------------------------------
 # La API key NUNCA va aquí: se lee de GEMINI_API_KEY en el archivo .env.
 ENV_PATH = BASE_DIR / ".env"
@@ -92,6 +108,10 @@ MIN_CAPTIONED_POSTS = 5      # con menos captions (y sin bio) no hay qué analiz
 TOP_HASHTAGS = 15            # hashtags más usados incluidos en las estadísticas
 
 GEMINI_TEMPERATURE = 0.3     # baja: respuestas más consistentes entre ejecuciones
+# Razonamiento interno del modelo antes de responder: "minimal", "low", "medium" o "high".
+# Por defecto Gemini usa "high", que puede tardar varios minutos; "low" basta para esta tarea.
+GEMINI_THINKING_LEVEL = "low"
 GEMINI_MAX_RETRIES = 3       # reintentos ante 429 / errores temporales del servidor
 GEMINI_RETRY_BASE_S = 10     # espera base del backoff exponencial (10, 20, 40 s)
 GEMINI_FORMAT_RETRIES = 1    # reintentos si la respuesta no cumple el esquema
+GEMINI_TIMEOUT_S = 120       # espera máxima por intento antes de reintentar

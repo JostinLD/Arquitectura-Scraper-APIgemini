@@ -13,6 +13,8 @@ import time
 
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types
+from google.genai._gaos.utils import RetryConfig
 from pydantic import ValidationError
 
 import config
@@ -46,7 +48,16 @@ def cargar_configuracion() -> tuple[str, str]:
 
 def analizar(prompt: str, api_key: str, modelo: str) -> AnalisisPersonalidad:
     """Envía el prompt a Gemini y devuelve la respuesta ya validada."""
-    client = genai.Client(api_key=api_key)
+    client = genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(
+            timeout=config.GEMINI_TIMEOUT_S * 1000,  # el SDK espera milisegundos
+        ),
+    )
+    # Sin reintentos internos del SDK (son silenciosos): los hace _llamar_con_reintentos.
+    # La API de interacciones ignora HttpRetryOptions(attempts=0) y reintenta igual,
+    # así que se desactivan directamente en su configuración.
+    client.interactions.sdk_configuration.retry_config = RetryConfig("none", None, False)
     intentos_formato = 0
     while True:
         texto = _llamar_con_reintentos(client, prompt, modelo)
@@ -64,7 +75,9 @@ def analizar(prompt: str, api_key: str, modelo: str) -> AnalisisPersonalidad:
 def _llamar_con_reintentos(client: genai.Client, prompt: str, modelo: str) -> str:
     for intento in range(config.GEMINI_MAX_RETRIES + 1):
         try:
-            log.info("Enviando a Gemini (modelo %s)...", modelo)
+            log.info("Enviando a Gemini (modelo %s, razonamiento %s), puede tardar hasta %d s...",
+                     modelo, config.GEMINI_THINKING_LEVEL, config.GEMINI_TIMEOUT_S)
+            inicio = time.monotonic()
             interaction = client.interactions.create(
                 model=modelo,
                 system_instruction=INSTRUCCIONES_SISTEMA,
@@ -75,7 +88,10 @@ def _llamar_con_reintentos(client: genai.Client, prompt: str, modelo: str) -> st
                     "mime_type": "application/json",
                     "schema": AnalisisPersonalidad.model_json_schema(),
                 },
-                generation_config={"temperature": config.GEMINI_TEMPERATURE},
+                generation_config={
+                    "temperature": config.GEMINI_TEMPERATURE,
+                    "thinking_level": config.GEMINI_THINKING_LEVEL,
+                },
                 store=False,  # no guardar la conversación en los servidores de Google
             )
         except Exception as exc:  # el SDK usa varias clases de error; se clasifican por código
@@ -98,6 +114,7 @@ def _llamar_con_reintentos(client: genai.Client, prompt: str, modelo: str) -> st
             time.sleep(espera)
             continue
 
+        log.info("Respuesta de Gemini recibida en %.0f s.", time.monotonic() - inicio)
         texto = (interaction.output_text or "").strip()
         if not texto:
             # Sin texto: normalmente la respuesta fue bloqueada por filtros de seguridad.

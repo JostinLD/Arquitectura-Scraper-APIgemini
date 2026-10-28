@@ -7,3 +7,7 @@ __pycache__/
 # Secretos y resultados del análisis
 .env
 resultados/
+seguidores.csv
+
+# Configuración del editor
+.vscode/

@@ -4,6 +4,7 @@ Uso:
     python analyze.py                        # analiza el output.json existente
     python analyze.py --dry-run              # prepara y guarda lo que se enviaría, SIN llamar a Gemini
     python analyze.py <usuario> --scrape     # ejecuta primero el scraper (main.py) y luego analiza
+    
 """
 from __future__ import annotations
 
@@ -127,10 +128,12 @@ def _analizar(args: argparse.Namespace) -> int:
     log.info("Guardado %s y %s", ruta_datos, ruta_prompt)
 
     # 4) Comprobación de anonimización: si queda algo identificable, no se envía nada.
-    fugas = buscar_fugas(datos, resultado.profile)
+    fugas, avisos = buscar_fugas(datos, resultado.profile)
+    for aviso in avisos:
+        log.warning("Posible dato identificable (no bloquea): %s", aviso)
     if fugas:
         raise InputDataError("La anonimización dejó datos identificables: " + "; ".join(fugas))
-    log.info("Anonimización verificada: sin usuario, nombre, IDs, URLs ni menciones reales.")
+    log.info("Anonimización verificada: sin usuario, nombre, IDs, URLs, emails, teléfonos ni menciones reales.")
 
     if args.dry_run:
         log.info("--dry-run: NO se llamó a Gemini. Revisa los archivos guardados.")

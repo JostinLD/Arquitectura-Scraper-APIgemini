@@ -24,6 +24,15 @@ from exceptions import InputDataError
 from models import Post, Profile, ScrapeResult
 
 _DIAS = ("lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo")
+_MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+          "septiembre", "octubre", "noviembre", "diciembre")
+# Palabras del nombre que NO se tratan como dato personal por sí solas (p. ej. el perfil
+# "Un buen MARTES"): borrarlas estropea los captions y las estadísticas por día.
+_PALABRAS_COMUNES = set(_DIAS) | set(_MESES) | {
+    "buen", "buena", "buenos", "buenas", "bueno", "dia", "dias", "noche", "tarde",
+    "vida", "amor", "feliz", "mundo", "casa", "club", "oficial", "official", "the",
+    "los", "las", "del", "con", "para", "por", "una", "uno", "mas", "todo", "todos",
+}
 
 # --- Patrones de datos personales que se borran del texto libre ------------------
 _URL_RE = re.compile(
@@ -103,7 +112,7 @@ def _terminos_identidad(profile: Profile) -> tuple[set[str], set[str]]:
     partes = re.findall(r"[^\W\d_]{3,}", profile.full_name or "")
     if partes:
         palabras.add(" ".join(partes))   # nombre completo sin emojis: "Ana Pérez"
-        palabras.update(partes)
+        palabras.update(p for p in partes if _sin_tildes(p).lower() not in _PALABRAS_COMUNES)
         junto = "".join(partes)          # nombre pegado: "AnaPérez" en un hashtag
         if len(partes) > 1 and len(junto) >= 6:
             subcadenas.add(junto)
@@ -277,14 +286,25 @@ def _r(valor: float) -> float:
 
 
 # ---------------------------------------------------------------------- verificación
-def buscar_fugas(datos: dict[str, Any], profile: Profile) -> list[str]:
-    """Devuelve los datos identificables que sigan presentes (lista vacía = todo bien).
+def buscar_fugas(datos: dict[str, Any], profile: Profile) -> tuple[list[str], list[str]]:
+    """Devuelve (criticas, avisos) con los datos identificables que sigan presentes.
 
-    Se ejecuta SIEMPRE antes de enviar: si encuentra algo, el análisis se detiene."""
+    Se ejecuta SIEMPRE antes de enviar. Las fugas críticas (usuario, nombre completo,
+    user_id, URLs, emails, teléfonos, menciones reales) detienen el análisis; una palabra
+    suelta del nombre solo genera un aviso, porque suele ser una palabra común."""
     texto = json.dumps(datos, ensure_ascii=False)
     fugas: list[str] = []
-    for coincidencia in sorted(set(_regex_identidad(_terminos_identidad(profile)).findall(texto))):
+    avisos: list[str] = []
+    subcadenas, palabras = _terminos_identidad(profile)
+    nombre_completo = {t for t in palabras if " " in t}
+    for coincidencia in sorted(set(_regex_identidad((subcadenas, nombre_completo)).findall(texto))):
         fugas.append(f"identidad: {coincidencia!r}")
+    sueltas = palabras - nombre_completo
+    if sueltas:
+        for coincidencia in sorted(set(_regex_identidad((set(), sueltas)).findall(texto))):
+            avisos.append(f"palabra del nombre: {coincidencia!r}")
+    if any(sum(c.isdigit() for c in m.group()) >= 9 for m in _PHONE_RE.finditer(texto)):
+        fugas.append("teléfono")
     if profile.user_id and profile.user_id in texto:
         fugas.append("user_id")
     for patron, nombre in ((r"https?://|www\.|instagram\.com|cdninstagram|fbcdn", "URL"),
@@ -295,4 +315,4 @@ def buscar_fugas(datos: dict[str, Any], profile: Profile) -> list[str]:
               if not re.fullmatch(r"usuario_\d+", m) and m != datos.get("perfil_id")]
     if reales:
         fugas.append(f"menciones: {sorted(set(reales))}")
-    return fugas
+    return fugas, avisos
